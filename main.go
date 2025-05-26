@@ -16,8 +16,14 @@ type Quote struct {
 var quotes []Quote
 var nextID = 1
 
+func jsonMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func getAllQuotes(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(quotes)
 }
 
@@ -30,7 +36,6 @@ func createQuote(w http.ResponseWriter, r *http.Request) {
 	nextID++
 	quotes = append(quotes, q)
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(q)
 }
@@ -46,6 +51,8 @@ func main() {
 
 	r.HandleFunc("/quotes", getAllQuotes).Methods("GET")
 	r.HandleFunc("/quotes", createQuote).Methods("POST")
+
+	r.Use(jsonMiddleware)
 
 	http.ListenAndServe(":8080", r)
 }
