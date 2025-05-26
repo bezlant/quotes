@@ -24,10 +24,6 @@ func jsonMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func getAllQuotes(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(quotes)
-}
-
 func createQuote(w http.ResponseWriter, r *http.Request) {
 	var q Quote
 	// TODO: error handling
@@ -49,16 +45,45 @@ func getRandomQuote(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(q)
 }
 
+func getQuotes(w http.ResponseWriter, r *http.Request) {
+	author := r.URL.Query().Get("author")
+	if author != "" {
+		getQuotesByAuthor(w, r)
+		return
+	}
+
+	getAllQuotes(w)
+}
+
+func getAllQuotes(w http.ResponseWriter) {
+	json.NewEncoder(w).Encode(quotes)
+}
+
+func getQuotesByAuthor(w http.ResponseWriter, r *http.Request) {
+	author := r.URL.Query().Get("author")
+
+	var filtered []Quote
+
+	for _, q := range quotes {
+		if q.Author == author {
+			filtered = append(filtered, q)
+		}
+	}
+
+	json.NewEncoder(w).Encode(make([]Quote, 0))
+}
+
 func main() {
 	r := mux.NewRouter()
 
 	quotes = append(quotes, Quote{
-		ID:    nextID,
-		Quote: "Aboba abobcius abobenko",
+		ID:     nextID,
+		Quote:  "Aboba abobcius abobenko",
+		Author: "Aboba",
 	})
 	nextID++
 
-	r.HandleFunc("/quotes", getAllQuotes).Methods("GET")
+	r.HandleFunc("/quotes", getQuotes).Methods("GET")
 	r.HandleFunc("/quotes", createQuote).Methods("POST")
 	r.HandleFunc("/quotes/random", getRandomQuote).Methods("GET")
 
