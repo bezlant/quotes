@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"math/rand"
 	"net/http"
+	"slices"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -73,7 +75,27 @@ func getQuotesByAuthor(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(make([]Quote, 0))
 }
 
+func deleteQuote(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+	}
+
+	for i, q := range quotes {
+		if id == q.ID {
+			quotes = slices.Delete(quotes, i, i+1)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
+	http.Error(w, "Quote not found", http.StatusNotFound)
+}
+
 func main() {
+	// TODO: add tests
 	r := mux.NewRouter()
 
 	quotes = append(quotes, Quote{
@@ -86,6 +108,7 @@ func main() {
 	r.HandleFunc("/quotes", getQuotes).Methods("GET")
 	r.HandleFunc("/quotes", createQuote).Methods("POST")
 	r.HandleFunc("/quotes/random", getRandomQuote).Methods("GET")
+	r.HandleFunc("/quotes/{id}", deleteQuote).Methods("DELETE")
 
 	r.Use(jsonMiddleware)
 
