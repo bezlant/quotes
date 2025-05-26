@@ -16,8 +16,25 @@ type Quote struct {
 	Quote  string `json:"quote"`
 }
 
-var quotes []Quote
-var nextID = 1
+type QuoteService struct {
+	quotes []Quote
+	nextID int
+}
+
+func NewQuoteService() *QuoteService {
+	return &QuoteService{
+		quotes: make([]Quote, 0),
+		nextID: 1,
+	}
+}
+
+type QuoteHandler struct {
+	service *QuoteService
+}
+
+func NewQuoteHandler(service *QuoteService) *QuoteHandler {
+	return &QuoteHandler{service: service}
+}
 
 func jsonMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -26,96 +43,135 @@ func jsonMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func createQuote(w http.ResponseWriter, r *http.Request) {
-	var q Quote
-	err := json.NewDecoder(r.Body).Decode(&q)
+func (qs *QuoteService) AddQuote(author, quote string) Quote {
+	newQuote := Quote{
+		ID:     qs.nextID,
+		Author: author,
+		Quote:  quote,
+	}
+
+	qs.quotes = append(qs.quotes, newQuote)
+	qs.nextID++
+
+	return newQuote
+}
+
+func (qh *QuoteHandler) CreateQuote(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Author string `json:"author"`
+		Quote  string `json:"quote"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	q.ID = nextID
-	nextID++
-	quotes = append(quotes, q)
+	if req.Author == "" || req.Quote == "" {
+		http.Error(w, "Author an Quote fields required", http.StatusBadRequest)
+		return
+	}
+
+	quote := qh.service.AddQuote(req.Author, req.Quote)
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(q)
+	json.NewEncoder(w).Encode(quote)
 }
 
-func getRandomQuote(w http.ResponseWriter, r *http.Request) {
-	if len(quotes) == 0 {
+func (qs *QuoteService) GetRandomQuote() *Quote {
+	if len(qs.quotes) == 0 {
+		return nil
+	}
+
+	q := qs.quotes[rand.Intn(len(qs.quotes))]
+
+	return &q
+}
+
+func (gh *QuoteHandler) GetRandomQuote(w http.ResponseWriter, r *http.Request) {
+	quote := gh.service.GetRandomQuote()
+
+	if quote == nil {
 		http.Error(w, "No quotes available", http.StatusNotFound)
 		return
 	}
 
-	q := quotes[rand.Intn(len(quotes))]
-
-	json.NewEncoder(w).Encode(q)
+	json.NewEncoder(w).Encode(quote)
 }
 
-func getQuotes(w http.ResponseWriter, r *http.Request) {
-	author := r.URL.Query().Get("author")
-	if author != "" {
-		getQuotesByAuthor(w, r)
-		return
-	}
+func (qs *QuoteService) GetAllQuotes() []Quote {
+	quotes := make([]Quote, len(qs.quotes))
+	copy(quotes, qs.quotes)
 
-	getAllQuotes(w)
+	return quotes
 }
 
-func getAllQuotes(w http.ResponseWriter) {
-	json.NewEncoder(w).Encode(quotes)
-}
-
-func getQuotesByAuthor(w http.ResponseWriter, r *http.Request) {
-	author := r.URL.Query().Get("author")
-
+func (qs *QuoteService) GetQuotesByAuthor(author string) []Quote {
 	var filtered []Quote
 
-	for _, q := range quotes {
+	for _, q := range qs.quotes {
 		if q.Author == author {
 			filtered = append(filtered, q)
 		}
 	}
 
-	json.NewEncoder(w).Encode(make([]Quote, 0))
+	return filtered
 }
 
-func deleteQuote(w http.ResponseWriter, r *http.Request) {
+func (qh *QuoteHandler) GetQuotes(w http.ResponseWriter, r *http.Request) {
+	author := r.URL.Query().Get("author")
+
+	var quotes []Quote
+	if author != "" {
+		quotes = qh.service.GetQuotesByAuthor(author)
+	} else {
+		quotes = qh.service.GetAllQuotes()
+	}
+
+	json.NewEncoder(w).Encode(quotes)
+}
+
+func (qs *QuoteService) DeleteQuote(id int) bool {
+	for i, q := range qs.quotes {
+		if id == q.ID {
+			qs.quotes = slices.Delete(qs.quotes, i, i+1)
+			qs.nextID--
+			return true
+		}
+	}
+	return false
+}
+
+func (qh *QuoteHandler) DeleteQuote(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	idStr := vars["id"]
+
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
 	}
 
-	for i, q := range quotes {
-		if id == q.ID {
-			quotes = slices.Delete(quotes, i, i+1)
-			nextID--
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	if qh.service.DeleteQuote(id) {
+		w.WriteHeader(http.StatusNoContent)
+	} else {
+		http.Error(w, "Quote not found", http.StatusNotFound)
 	}
-
-	http.Error(w, "Quote not found", http.StatusNotFound)
 }
 
 func main() {
 	// TODO: add tests
+
+	service := NewQuoteService()
+	handler := NewQuoteHandler(service)
+
 	r := mux.NewRouter()
 
-	quotes = append(quotes, Quote{
-		ID:     nextID,
-		Quote:  "Aboba abobcius abobenko",
-		Author: "Aboba",
-	})
-	nextID++
-
-	r.HandleFunc("/quotes", getQuotes).Methods("GET")
-	r.HandleFunc("/quotes", createQuote).Methods("POST")
-	r.HandleFunc("/quotes/random", getRandomQuote).Methods("GET")
-	r.HandleFunc("/quotes/{id}", deleteQuote).Methods("DELETE")
+	r.HandleFunc("/quotes", handler.GetQuotes).Methods("GET")
+	r.HandleFunc("/quotes", handler.CreateQuote).Methods("POST")
+	r.HandleFunc("/quotes/random", handler.GetRandomQuote).Methods("GET")
+	r.HandleFunc("/quotes/{id}", handler.DeleteQuote).Methods("DELETE")
 
 	r.Use(jsonMiddleware)
 
