@@ -86,6 +86,7 @@ func deleteQuote(w http.ResponseWriter, r *http.Request) {
 	for i, q := range quotes {
 		if id == q.ID {
 			quotes = slices.Delete(quotes, i, i+1)
+			nextID--
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
