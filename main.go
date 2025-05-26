@@ -28,8 +28,11 @@ func jsonMiddleware(next http.Handler) http.Handler {
 
 func createQuote(w http.ResponseWriter, r *http.Request) {
 	var q Quote
-	// TODO: error handling
-	json.NewDecoder(r.Body).Decode(&q)
+	err := json.NewDecoder(r.Body).Decode(&q)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
 
 	q.ID = nextID
 	nextID++
@@ -40,7 +43,10 @@ func createQuote(w http.ResponseWriter, r *http.Request) {
 }
 
 func getRandomQuote(w http.ResponseWriter, r *http.Request) {
-	// TODO: error handling (no quotes)
+	if len(quotes) == 0 {
+		http.Error(w, "No quotes available", http.StatusNotFound)
+		return
+	}
 
 	q := quotes[rand.Intn(len(quotes))]
 
