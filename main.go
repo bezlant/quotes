@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math/rand"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -40,6 +41,14 @@ func createQuote(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(q)
 }
 
+func getRandomQuote(w http.ResponseWriter, r *http.Request) {
+	// TODO: error handling (no quotes)
+
+	q := quotes[rand.Intn(len(quotes))]
+
+	json.NewEncoder(w).Encode(q)
+}
+
 func main() {
 	r := mux.NewRouter()
 
@@ -51,6 +60,7 @@ func main() {
 
 	r.HandleFunc("/quotes", getAllQuotes).Methods("GET")
 	r.HandleFunc("/quotes", createQuote).Methods("POST")
+	r.HandleFunc("/quotes/random", getRandomQuote).Methods("GET")
 
 	r.Use(jsonMiddleware)
 
